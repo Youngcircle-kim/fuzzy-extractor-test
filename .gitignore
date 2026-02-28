@@ -24,10 +24,6 @@ lib/
 # TypeScript v1 declaration files
 typings/
 
-# Compiled output
-*.js
-*.jsx
-*.js.map
 
 # TypeScript build output
 out/

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>검증 페이지</title>
+    <link rel="stylesheet" href="/common.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="nav">
+        <a class="link-btn" href="/register.html">등록</a>
+        <a class="link-btn" href="/verify.html">검증</a>
+      </div>
+
+      <h1>검증 페이지</h1>
+
+      <div class="video-box">
+        <video id="video" autoplay playsinline muted></video>
+      </div>
+
+      <div class="canvas-box">
+        <canvas id="canvas"></canvas>
+      </div>
+
+      <div class="actions">
+        <button id="startBtn">웹캠 시작</button>
+        <button id="captureBtn" disabled>촬영 후 검증</button>
+      </div>
+
+      <div class="result" id="result">대기 중...</div>
+    </div>
+
+    <script type="module">
+      import { startCamera, captureFrame, canvasToBlob } from '/camera.js';
+
+      const video = document.getElementById('video');
+      const canvas = document.getElementById('canvas');
+      const startBtn = document.getElementById('startBtn');
+      const captureBtn = document.getElementById('captureBtn');
+      const result = document.getElementById('result');
+
+      let stream = null;
+
+      startBtn.addEventListener('click', async () => {
+        try {
+          stream = await startCamera(video);
+          captureBtn.disabled = false;
+          result.textContent = '웹캠 시작 완료';
+        } catch (err) {
+          result.textContent = '웹캠 시작 실패: ' + err.message;
+        }
+      });
+
+      captureBtn.addEventListener('click', async () => {
+        try {
+          captureFrame(video, canvas);
+          const blob = await canvasToBlob(canvas);
+
+          const formData = new FormData();
+          formData.append('image', blob, 'verify.jpg');
+
+          result.textContent = '서버에 검증 요청 중...';
+
+          const res = await fetch('/api/bch/verify', {
+            method: 'POST',
+            body: formData,
+          });
+
+          const data = await res.json();
+          result.textContent = JSON.stringify(data, null, 2);
+        } catch (err) {
+          result.textContent = '검증 실패: ' + err.message;
+        }
+      });
+    </script>
+  </body>
+</html>
