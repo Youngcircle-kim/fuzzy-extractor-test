@@ -1,82 +1,75 @@
 #include <napi.h>
 #include "BCH.hpp"
-#include <vector>
-#include <cstring>
-
-std::vector<unsigned char> bufferToVector(const Napi::Uint8Array &arr)
-{
-    std::vector<unsigned char> out(arr.ElementLength());
-    std::memcpy(out.data(), arr.Data(), arr.ElementLength());
-    return out;
-}
 
 Napi::Value GenerateSyndrome(const Napi::CallbackInfo &info)
 {
     Napi::Env env = info.Env();
 
-    if (info.Length() < 1 || !info[0].IsTypedArray())
+    if (!info[0].IsString())
     {
-        Napi::TypeError::New(env, "Expected Uint8Array or Buffer").ThrowAsJavaScriptException();
+        Napi::TypeError::New(env, "Expected hex string").ThrowAsJavaScriptException();
         return env.Null();
     }
 
-    try
+    std::string hexStr = info[0].As<Napi::String>();
+
+    // hex → byte vector 변환
+    std::vector<unsigned char> data;
+    for (size_t i = 0; i < hexStr.length(); i += 2)
     {
-        Napi::Uint8Array input = info[0].As<Napi::Uint8Array>();
-
-        BCH bch(8);
-        std::vector<unsigned char> w = bufferToVector(input);
-        std::vector<int> s = bch.compute_syndrome(w);
-
-        Napi::Array result = Napi::Array::New(env, s.size());
-        for (size_t i = 0; i < s.size(); i++)
-        {
-            result[i] = Napi::Number::New(env, s[i]);
-        }
-
-        return result;
+        std::string byteString = hexStr.substr(i, 2);
+        unsigned char byte = (unsigned char)strtol(byteString.c_str(), nullptr, 16);
+        data.push_back(byte);
     }
-    catch (...)
+
+    BCH bch(10); // t=10 예시
+
+    std::vector<int> syndrome = bch.compute_syndrome(data);
+
+    Napi::Array result = Napi::Array::New(env, syndrome.size());
+
+    for (size_t i = 0; i < syndrome.size(); i++)
     {
-        Napi::Error::New(env, "C++ Error in generateSyndrome").ThrowAsJavaScriptException();
-        return env.Null();
+        result[i] = Napi::Number::New(env, syndrome[i]);
     }
+
+    return result;
 }
 
 Napi::Value Recover(const Napi::CallbackInfo &info)
 {
     Napi::Env env = info.Env();
 
-    if (info.Length() < 2 || !info[0].IsTypedArray() || !info[1].IsArray())
+    std::string hexStr = info[0].As<Napi::String>();
+    Napi::Array jsSyndrome = info[1].As<Napi::Array>();
+
+    std::vector<unsigned char> data;
+    for (size_t i = 0; i < hexStr.length(); i += 2)
     {
-        Napi::TypeError::New(env, "Expected (Buffer/Uint8Array, number[])").ThrowAsJavaScriptException();
-        return env.Null();
+        std::string byteString = hexStr.substr(i, 2);
+        unsigned char byte = (unsigned char)strtol(byteString.c_str(), nullptr, 16);
+        data.push_back(byte);
     }
 
-    try
+    std::vector<int> syndrome;
+    for (uint32_t i = 0; i < jsSyndrome.Length(); i++)
     {
-        Napi::Uint8Array input = info[0].As<Napi::Uint8Array>();
-        Napi::Array synArray = info[1].As<Napi::Array>();
-
-        BCH bch(8);
-        std::vector<unsigned char> w_prime = bufferToVector(input);
-
-        std::vector<int> saved_s;
-        saved_s.reserve(synArray.Length());
-        for (uint32_t i = 0; i < synArray.Length(); i++)
-        {
-            saved_s.push_back(synArray.Get(i).As<Napi::Number>().Int32Value());
-        }
-
-        std::vector<unsigned char> recovered = bch.recover(w_prime, saved_s);
-
-        return Napi::Buffer<unsigned char>::Copy(env, recovered.data(), recovered.size());
+        syndrome.push_back(jsSyndrome.Get(i).As<Napi::Number>().Int32Value());
     }
-    catch (...)
+
+    BCH bch(8);
+
+    std::vector<unsigned char> recovered = bch.recover(data, syndrome);
+
+    std::string resultHex;
+    char buf[3];
+    for (unsigned char byte : recovered)
     {
-        Napi::Error::New(env, "Recovery Error").ThrowAsJavaScriptException();
-        return env.Null();
+        sprintf(buf, "%02x", byte);
+        resultHex += buf;
     }
+
+    return Napi::String::New(env, resultHex);
 }
 
 Napi::Object Init(Napi::Env env, Napi::Object exports)
