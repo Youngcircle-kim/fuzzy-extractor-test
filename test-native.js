@@ -6,7 +6,7 @@ const syndrome = bchAddon.generateSyndrome(originalHex);
 
 console.log('syndrome:', syndrome);
 
-const noisyHex = '007fffffffffffffffffffffffffffff';
+const noisyHex = '0fffffffffffffffffffffffffffffff';
 
 const recovered = bchAddon.recover(noisyHex, syndrome);
 
